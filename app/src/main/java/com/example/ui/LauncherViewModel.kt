@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.R
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 const val MINECRAFT_PACKAGE_BEDROCK = "com.mojang.minecraftpe"
 const val MINECRAFT_PACKAGE_PREVIEW = "com.mojang.minecraftpe.beta"
@@ -141,20 +143,67 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun shareApp(context: Context) {
-        try {
-            val shareText = context.getString(R.string.share_text)
-            val shareLink = context.getString(R.string.share_link)
-            val sendIntent = Intent().apply {
-                action = Intent.ACTION_SEND
-                putExtra(Intent.EXTRA_TEXT, "$shareText\n\n$shareLink")
-                type = "text/plain"
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val sourceDir = context.applicationInfo.sourceDir
+                if (sourceDir != null) {
+                    val sourceFile = File(sourceDir)
+                    if (sourceFile.exists()) {
+                        val cacheDir = File(context.cacheDir, "shared_apk").apply { mkdirs() }
+                        val destFile = File(cacheDir, "MinecraftLauncher.apk")
+                        
+                        sourceFile.inputStream().use { input ->
+                            destFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+
+                        val apkUri: Uri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            destFile
+                        )
+
+                        val sendIntent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            type = "application/vnd.android.package-archive"
+                            putExtra(Intent.EXTRA_STREAM, apkUri)
+                            putExtra(Intent.EXTRA_SUBJECT, "Minecraft Launcher APK")
+                            putExtra(Intent.EXTRA_TEXT, context.getString(R.string.share_text))
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+
+                        val chooserIntent = Intent.createChooser(sendIntent, context.getString(R.string.share_title)).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+
+                        withContext(Dispatchers.Main) {
+                            context.startActivity(chooserIntent)
+                        }
+                        return@launch
+                    }
+                }
+            } catch (e: Exception) {
+                // Fallback to text link if APK export fails
             }
-            val chooserIntent = Intent.createChooser(sendIntent, context.getString(R.string.share_title)).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+            withContext(Dispatchers.Main) {
+                try {
+                    val shareText = context.getString(R.string.share_text)
+                    val shareLink = context.getString(R.string.share_link)
+                    val sendIntent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_TEXT, "$shareText\n\n$shareLink")
+                        type = "text/plain"
+                    }
+                    val chooserIntent = Intent.createChooser(sendIntent, context.getString(R.string.share_title)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(chooserIntent)
+                } catch (_: Exception) {
+                    Toast.makeText(context, "Не удалось отправить", Toast.LENGTH_SHORT).show()
+                }
             }
-            context.startActivity(chooserIntent)
-        } catch (_: Exception) {
-            // Ignore error
         }
     }
 
