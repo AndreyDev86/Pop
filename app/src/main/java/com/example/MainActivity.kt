@@ -353,6 +353,7 @@ fun LauncherScreen(
                 Spacer(modifier = Modifier.height(30.dp))
 
                 // Auto-Detected Version Selector Card
+                val currentDisplayApp = selectedVersion?.appName ?: mcStatus.primaryAppName
                 val currentDisplayVersion = selectedVersion?.versionName ?: mcStatus.versionName
                 val currentDisplayTag = selectedVersion?.tag ?: mcStatus.tag
 
@@ -397,10 +398,9 @@ fun LauncherScreen(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Text(
-                                        text = currentDisplayVersion ?: stringResource(R.string.no_version_selected),
+                                        text = if (currentDisplayVersion != null) "$currentDisplayApp $currentDisplayVersion" else stringResource(R.string.no_version_selected),
                                         color = if (currentDisplayVersion != null) TextPrimary else TextMuted,
-                                        fontSize = 14.sp,
-                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                     currentDisplayTag?.let { tag ->
@@ -838,7 +838,8 @@ fun VersionListItem(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.weight(1f)
         ) {
             // Radio Indicator
             Box(
@@ -863,38 +864,55 @@ fun VersionListItem(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = version.versionName,
-                    color = if (isSelected) Color.White else TextSecondary,
-                    fontSize = 14.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = version.appName,
+                        color = if (isSelected) Color.White else TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "v${version.versionName}",
+                        color = if (isSelected) CyanAccent else TextSecondary,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val tagBgColor = when (version.tag) {
+                        "Preview" -> Color(0x26F59E0B)
+                        "Education" -> Color(0x268B5CF6)
+                        "Pojav" -> Color(0x26EC4899)
+                        "Клон", "Clone" -> Color(0x2638BDF8)
+                        "Оригинал", "Bedrock" -> Color(0x2610B981)
+                        else -> Color(0x2610B981)
+                    }
+                    val tagTextColor = when (version.tag) {
+                        "Preview" -> StatusAmber
+                        "Education" -> Color(0xFFA78BFA)
+                        "Pojav" -> Color(0xFFF472B6)
+                        "Клон", "Clone" -> CyanAccent
+                        "Оригинал", "Bedrock" -> StatusGreen
+                        else -> StatusGreen
+                    }
+
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
-                            .background(
-                                when (version.tag) {
-                                    "Preview" -> Color(0x26F59E0B)
-                                    "Education" -> Color(0x268B5CF6)
-                                    else -> Color(0x2610B981)
-                                }
-                            )
+                            .background(tagBgColor)
                             .padding(horizontal = 6.dp, vertical = 1.dp)
                     ) {
                         Text(
                             text = version.tag,
                             fontSize = 9.sp,
-                            color = when (version.tag) {
-                                "Preview" -> StatusAmber
-                                "Education" -> Color(0xFFA78BFA)
-                                else -> StatusGreen
-                            },
+                            color = tagTextColor,
                             fontWeight = FontWeight.SemiBold
                         )
                     }

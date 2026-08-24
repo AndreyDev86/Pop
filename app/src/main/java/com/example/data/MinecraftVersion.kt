@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 data class MinecraftVersion(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    val appName: String = "Minecraft",
     val packageName: String = "com.mojang.minecraftpe",
     val versionName: String,
     val versionCode: Long = 0,

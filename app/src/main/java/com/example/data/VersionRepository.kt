@@ -3,6 +3,7 @@ package com.example.data
 import kotlinx.coroutines.flow.Flow
 
 data class DetectedAppInfo(
+    val appName: String,
     val packageName: String,
     val versionName: String,
     val versionCode: Long,
@@ -31,9 +32,10 @@ class VersionRepository(private val versionDao: MinecraftVersionDao) {
         for (app in detectedApps) {
             val existing = versionDao.getVersionByPackage(app.packageName)
             if (existing != null) {
-                if (existing.versionName != app.versionName || existing.versionCode != app.versionCode || existing.tag != app.tag) {
+                if (existing.appName != app.appName || existing.versionName != app.versionName || existing.versionCode != app.versionCode || existing.tag != app.tag) {
                     versionDao.updateVersion(
                         existing.copy(
+                            appName = app.appName,
                             versionName = app.versionName,
                             versionCode = app.versionCode,
                             tag = app.tag,
@@ -45,6 +47,7 @@ class VersionRepository(private val versionDao: MinecraftVersionDao) {
                 val shouldSelect = !hasSelected
                 val newId = versionDao.insertVersion(
                     MinecraftVersion(
+                        appName = app.appName,
                         packageName = app.packageName,
                         versionName = app.versionName,
                         versionCode = app.versionCode,

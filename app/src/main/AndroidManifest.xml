@@ -4,11 +4,29 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
 
     <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
         <package android:name="com.mojang.minecraftpe" />
         <package android:name="com.mojang.minecraftpe.beta" />
         <package android:name="com.mojang.minecraftedu" />
+        <package android:name="net.kdt.pojavlaunch" />
+        <package android:name="net.kdt.pojavlaunch.debug" />
+        <package android:name="com.craftsman.go" />
+        <package android:name="craftsman.building.craft.game" />
+        <package android:name="com.crafting.and.building" />
+        <package android:name="com.lokicraft.game" />
+        <package android:name="com.lokicraft.lokicraft" />
+        <package android:name="com.multicraft.game" />
+        <package android:name="com.tellurionmobile.realmcraft" />
+        <package android:name="com.master.craft.building.craftsman" />
+        <package android:name="com.survivalcraft2" />
     </queries>
 
     <application

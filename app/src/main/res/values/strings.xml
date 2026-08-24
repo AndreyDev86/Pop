@@ -21,7 +21,7 @@
     <string name="btn_rescan">Сканировать устройство</string>
     <string name="active_badge">АКТИВНА</string>
     <string name="empty_versions_title">Версии не найдены</string>
-    <string name="empty_versions_desc">Minecraft не обнаружен на устройстве. Установите Minecraft Bedrock, Preview или Education Edition, и лаунчер определит его автоматически.</string>
+    <string name="empty_versions_desc">Minecraft или его клоны не обнаружены на устройстве. Установите Minecraft Bedrock, Preview, Craftsman, LokiCraft или другие клоны — лаунчер определит их автоматически.</string>
     <string name="no_version_selected">Версия не найдена</string>
     <string name="auto_detected_badge">АВТО</string>
     <string name="btn_close">Закрыть</string>
