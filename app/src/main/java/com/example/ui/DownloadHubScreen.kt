@@ -1,12 +1,8 @@
 package com.example.ui
 
-import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,13 +29,13 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.InstallMobile
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -96,11 +92,11 @@ fun DownloadHubScreen(
     val context = LocalContext.current
     val releases by viewModel.downloadableVersions.collectAsState()
     val isLoading by viewModel.isLoadingReleases.collectAsState()
-    val repoSource by viewModel.gitHubRepo.collectAsState()
+    val siteUrl by viewModel.siteUrl.collectAsState()
     val activeFilter by viewModel.downloadFilter.collectAsState()
     val searchQuery by viewModel.downloadSearchQuery.collectAsState()
 
-    var isRepoDialogOpen by remember { mutableStateOf(false) }
+    var isSiteDialogOpen by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier
@@ -189,7 +185,7 @@ fun DownloadHubScreen(
                 }
             }
 
-            // GitHub Repository Source Bar
+            // MCPEHub Source Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -197,9 +193,9 @@ fun DownloadHubScreen(
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color(0x0F38BDF8))
                     .border(1.dp, Color(0x2E38BDF8), RoundedCornerShape(14.dp))
-                    .clickable { isRepoDialogOpen = true }
+                    .clickable { isSiteDialogOpen = true }
                     .padding(horizontal = 14.dp, vertical = 10.dp)
-                    .testTag("repo_source_card"),
+                    .testTag("site_source_card"),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -208,7 +204,7 @@ fun DownloadHubScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.FolderZip,
+                        imageVector = Icons.Default.Language,
                         contentDescription = null,
                         tint = CyanAccent,
                         modifier = Modifier.size(18.dp)
@@ -222,11 +218,13 @@ fun DownloadHubScreen(
                             letterSpacing = 1.2.sp
                         )
                         Text(
-                            text = repoSource,
+                            text = siteUrl,
                             color = TextPrimary,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -305,7 +303,8 @@ fun DownloadHubScreen(
                 "Все" to stringResource(R.string.filter_all),
                 "Релиз" to stringResource(R.string.filter_releases),
                 "Preview" to stringResource(R.string.filter_betas),
-                "Классика" to "Классика"
+                "Xbox Live" to stringResource(R.string.filter_xbox),
+                "Классика" to stringResource(R.string.filter_classics)
             )
 
             Row(
@@ -347,15 +346,17 @@ fun DownloadHubScreen(
                 val matchesFilter = when (activeFilter) {
                     "Все" -> true
                     "Preview" -> version.tag.contains("Preview", ignoreCase = true) || version.tag.contains("Бета", ignoreCase = true)
-                    "Классика" -> version.tag.contains("Классика", ignoreCase = true) || version.versionName.startsWith("1.1")
-                    "Релиз" -> version.tag.contains("Релиз", ignoreCase = true) || version.tag.contains("Оригинал", ignoreCase = true)
+                    "Xbox Live" -> version.tag.contains("Xbox", ignoreCase = true) || version.title.contains("Xbox", ignoreCase = true)
+                    "Классика" -> version.tag.contains("Классика", ignoreCase = true) || version.versionName.startsWith("1.1.") || version.versionName.startsWith("1.16")
+                    "Релиз" -> version.tag.contains("Релиз", ignoreCase = true)
                     else -> version.tag.equals(activeFilter, ignoreCase = true)
                 }
 
                 val matchesSearch = searchQuery.isBlank() ||
                         version.title.contains(searchQuery, ignoreCase = true) ||
                         version.versionName.contains(searchQuery, ignoreCase = true) ||
-                        version.tag.contains(searchQuery, ignoreCase = true)
+                        version.tag.contains(searchQuery, ignoreCase = true) ||
+                        version.releaseNotes.contains(searchQuery, ignoreCase = true)
 
                 matchesFilter && matchesSearch
             }
@@ -429,6 +430,9 @@ fun DownloadHubScreen(
                             },
                             onInstallClick = {
                                 viewModel.installDownloadedApk(context, version)
+                            },
+                            onOpenSiteClick = {
+                                viewModel.openMcpeHubArticle(context, version.articleUrl)
                             }
                         )
                     }
@@ -440,12 +444,12 @@ fun DownloadHubScreen(
         }
     }
 
-    // Change GitHub Repository Dialog
-    if (isRepoDialogOpen) {
-        var inputRepo by remember { mutableStateOf(repoSource) }
+    // Change MCPEHub URL Dialog
+    if (isSiteDialogOpen) {
+        var inputUrl by remember { mutableStateOf(siteUrl) }
 
         AlertDialog(
-            onDismissRequest = { isRepoDialogOpen = false },
+            onDismissRequest = { isSiteDialogOpen = false },
             containerColor = Color(0xFF0F1420),
             title = {
                 Text(
@@ -464,10 +468,10 @@ fun DownloadHubScreen(
                         lineHeight = 16.sp
                     )
                     OutlinedTextField(
-                        value = inputRepo,
-                        onValueChange = { inputRepo = it },
+                        value = inputUrl,
+                        onValueChange = { inputUrl = it },
                         singleLine = true,
-                        placeholder = { Text("AndreyDev86/Pop", color = TextMuted) },
+                        placeholder = { Text("https://mcpehub.org/download-mcpe/", color = TextMuted) },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = CyanAccent,
                             unfocusedBorderColor = Color(0x33FFFFFF),
@@ -481,10 +485,9 @@ fun DownloadHubScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (inputRepo.isNotBlank()) {
-                            viewModel.setCustomGitHubRepo(inputRepo)
-                            isRepoDialogOpen = false
-                            viewModel.refreshDownloadableVersions()
+                        if (inputUrl.isNotBlank()) {
+                            viewModel.setCustomSiteUrl(inputUrl)
+                            isSiteDialogOpen = false
                         }
                     }
                 ) {
@@ -496,7 +499,7 @@ fun DownloadHubScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { isRepoDialogOpen = false }) {
+                TextButton(onClick = { isSiteDialogOpen = false }) {
                     Text(text = stringResource(R.string.btn_cancel), color = TextSecondary)
                 }
             }
@@ -510,7 +513,8 @@ fun DownloadVersionCard(
     viewModel: LauncherViewModel,
     onDownloadClick: () -> Unit,
     onCancelClick: () -> Unit,
-    onInstallClick: () -> Unit
+    onInstallClick: () -> Unit,
+    onOpenSiteClick: () -> Unit
 ) {
     val downloadStateFlow = remember(version.id) {
         viewModel.getDownloadStateFlow(version)
@@ -519,20 +523,20 @@ fun DownloadVersionCard(
 
     val tagBgColor = when (version.tag) {
         "Preview", "Бета" -> Color(0x26F59E0B)
+        "Xbox Live" -> Color(0x2610B981)
         "Education" -> Color(0x268B5CF6)
-        "Pojav" -> Color(0x26EC4899)
         "Классика" -> Color(0x26F97316)
         "Клон" -> Color(0x2638BDF8)
-        else -> Color(0x2610B981)
+        else -> Color(0x260284C7)
     }
 
     val tagTextColor = when (version.tag) {
         "Preview", "Бета" -> Color(0xFFFBBF24)
+        "Xbox Live" -> StatusGreen
         "Education" -> Color(0xFFA78BFA)
-        "Pojav" -> Color(0xFFF472B6)
         "Классика" -> Color(0xFFFB923C)
         "Клон" -> CyanAccent
-        else -> StatusGreen
+        else -> CyanAccent
     }
 
     Box(
@@ -645,7 +649,7 @@ fun DownloadVersionCard(
                 )
             }
 
-            // Progress Bar & Action Button
+            // Progress Bar & Action Buttons
             when (val state = downloadState) {
                 is DownloadState.Downloading -> {
                     val animatedProgress by animateFloatAsState(
@@ -745,7 +749,33 @@ fun DownloadVersionCard(
                             )
                         }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Open article on mcpehub
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0x14FFFFFF))
+                                    .clickable { onOpenSiteClick() }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "mcpehub",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    contentDescription = null,
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+
                             // Re-download option
                             Box(
                                 modifier = Modifier
@@ -810,8 +840,31 @@ fun DownloadVersionCard(
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0x14FFFFFF))
+                                    .clickable { onOpenSiteClick() }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Открыть на MCPEHub",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    contentDescription = null,
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(10.dp))
@@ -836,9 +889,40 @@ fun DownloadVersionCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.End,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // MCPEHub article link
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0x12FFFFFF))
+                                .clickable { onOpenSiteClick() }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = null,
+                                tint = CyanAccent,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.btn_open_site),
+                                color = CyanAccent,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                contentDescription = null,
+                                tint = CyanAccent.copy(alpha = 0.7f),
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+
+                        // Download Button
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))

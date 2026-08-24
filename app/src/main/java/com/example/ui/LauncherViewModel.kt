@@ -16,7 +16,7 @@ import com.example.data.AppDatabase
 import com.example.data.DetectedAppInfo
 import com.example.data.DownloadState
 import com.example.data.DownloadableVersion
-import com.example.data.GitHubReleasesRepository
+import com.example.data.McpeHubRepository
 import com.example.data.MinecraftVersion
 import com.example.data.VersionRepository
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +46,7 @@ data class MinecraftStatus(
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: VersionRepository
-    private val gitHubRepository: GitHubReleasesRepository
+    private val mcpeHubRepository: McpeHubRepository
     private val downloadManager: ApkDownloadManager
 
     val versions: StateFlow<List<MinecraftVersion>>
@@ -70,8 +70,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _isLoadingReleases = MutableStateFlow(false)
     val isLoadingReleases: StateFlow<Boolean> = _isLoadingReleases.asStateFlow()
 
-    private val _gitHubRepo = MutableStateFlow("")
-    val gitHubRepo: StateFlow<String> = _gitHubRepo.asStateFlow()
+    private val _siteUrl = MutableStateFlow("https://mcpehub.org/download-mcpe/")
+    val siteUrl: StateFlow<String> = _siteUrl.asStateFlow()
 
     private val _downloadFilter = MutableStateFlow("Все")
     val downloadFilter: StateFlow<String> = _downloadFilter.asStateFlow()
@@ -82,9 +82,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     init {
         val db = AppDatabase.getDatabase(application)
         repository = VersionRepository(db.versionDao())
-        gitHubRepository = GitHubReleasesRepository(application)
+        mcpeHubRepository = McpeHubRepository(application)
         downloadManager = ApkDownloadManager(application)
-        _gitHubRepo.value = gitHubRepository.getTargetRepo()
+        _siteUrl.value = mcpeHubRepository.getSiteUrl()
 
         versions = repository.allVersions.stateIn(
             scope = viewModelScope,
@@ -152,9 +152,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         _downloadSearchQuery.value = query
     }
 
-    fun setCustomGitHubRepo(repo: String) {
-        gitHubRepository.setTargetRepo(repo)
-        _gitHubRepo.value = gitHubRepository.getTargetRepo()
+    fun setCustomSiteUrl(url: String) {
+        mcpeHubRepository.setSiteUrl(url)
+        _siteUrl.value = mcpeHubRepository.getSiteUrl()
+        refreshDownloadableVersions()
     }
 
     fun refreshDownloadableVersions() {
@@ -164,9 +165,20 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             val installedPackages = currentVersions.map { it.packageName }.toSet()
             val installedVersionNames = currentVersions.mapNotNull { it.versionName }.toSet()
 
-            val fetched = gitHubRepository.fetchReleases(installedPackages, installedVersionNames)
+            val fetched = mcpeHubRepository.fetchReleases(installedPackages, installedVersionNames)
             _downloadableVersions.value = fetched
             _isLoadingReleases.value = false
+        }
+    }
+
+    fun openMcpeHubArticle(context: Context, articleUrl: String) {
+        val target = if (articleUrl.isNotBlank()) articleUrl else "https://mcpehub.org/download-mcpe/"
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(target))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Не удалось открыть браузер: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 

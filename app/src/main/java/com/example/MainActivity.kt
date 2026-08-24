@@ -499,7 +499,7 @@ fun LauncherScreen(
                                 letterSpacing = 1.2.sp
                             )
                             Text(
-                                text = "Загрузка версий из GitHub репозитория",
+                                text = "Загрузка версий с сайта mcpehub.org",
                                 color = TextSecondary,
                                 fontSize = 10.sp
                             )

@@ -17,13 +17,14 @@ data class DownloadableVersion(
     val id: String,
     val title: String,
     val versionName: String,
-    val tag: String, // "Релиз", "Preview", "Бета", "Pojav", "Клон"
+    val tag: String, // "Релиз", "Preview", "Бета", "Xbox Live", "Клон", "Классика"
     val downloadUrl: String,
     val fileName: String,
     val sizeBytes: Long = 0L,
     val sizeFormatted: String = "",
     val releaseNotes: String = "",
     val publishedAt: String = "",
+    val articleUrl: String = "https://mcpehub.org/download-mcpe/",
     val isInstalledOnDevice: Boolean = false,
     val downloadState: DownloadState = DownloadState.Idle
 )
