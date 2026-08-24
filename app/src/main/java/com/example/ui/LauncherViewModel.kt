@@ -11,6 +11,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.R
 import com.example.data.AppDatabase
+import com.example.data.DetectedAppInfo
 import com.example.data.MinecraftVersion
 import com.example.data.VersionRepository
 import kotlinx.coroutines.Dispatchers
@@ -22,21 +23,24 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
-const val MINECRAFT_PACKAGE = "com.mojang.minecraftpe"
+const val MINECRAFT_PACKAGE_BEDROCK = "com.mojang.minecraftpe"
+const val MINECRAFT_PACKAGE_PREVIEW = "com.mojang.minecraftpe.beta"
+const val MINECRAFT_PACKAGE_EDUCATION = "com.mojang.minecraftedu"
 
 data class MinecraftStatus(
     val isInstalled: Boolean = false,
+    val primaryPackageName: String = MINECRAFT_PACKAGE_BEDROCK,
     val versionName: String? = null,
-    val versionCode: Long? = null
+    val versionCode: Long? = null,
+    val tag: String? = null,
+    val detectedCount: Int = 0
 )
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: VersionRepository
 
     val versions: StateFlow<List<MinecraftVersion>>
-
     val selectedVersion: StateFlow<MinecraftVersion?>
 
     private val _mcStatus = MutableStateFlow(MinecraftStatus())
@@ -45,11 +49,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _isVersionSheetOpen = MutableStateFlow(false)
     val isVersionSheetOpen: StateFlow<Boolean> = _isVersionSheetOpen.asStateFlow()
 
-    private val _isAddDialogOpen = MutableStateFlow(false)
-    val isAddDialogOpen: StateFlow<Boolean> = _isAddDialogOpen.asStateFlow()
-
-    private val _isLoadingApk = MutableStateFlow(false)
-    val isLoadingApk: StateFlow<Boolean> = _isLoadingApk.asStateFlow()
+    private val _isScanning = MutableStateFlow(false)
+    val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
     init {
         val db = AppDatabase.getDatabase(application)
@@ -74,13 +75,23 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun refreshStatus() {
         val context = getApplication<Application>().applicationContext
-        val status = checkMinecraftInstalled(context)
-        _mcStatus.value = status
+        viewModelScope.launch(Dispatchers.IO) {
+            _isScanning.value = true
+            val detected = scanAllInstalledMinecraftPackages(context)
+            repository.syncDetectedApps(detected)
 
-        viewModelScope.launch {
-            if (status.isInstalled && !status.versionName.isNullOrBlank()) {
-                repository.syncDetectedVersion(status.versionName)
-            }
+            val isInstalled = detected.isNotEmpty()
+            val primary = detected.firstOrNull()
+
+            _mcStatus.value = MinecraftStatus(
+                isInstalled = isInstalled,
+                primaryPackageName = primary?.packageName ?: MINECRAFT_PACKAGE_BEDROCK,
+                versionName = primary?.versionName,
+                versionCode = primary?.versionCode,
+                tag = primary?.tag,
+                detectedCount = detected.size
+            )
+            _isScanning.value = false
         }
     }
 
@@ -92,135 +103,100 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         _isVersionSheetOpen.value = false
     }
 
-    fun openAddDialog() {
-        _isAddDialogOpen.value = true
-    }
-
-    fun closeAddDialog() {
-        _isAddDialogOpen.value = false
-    }
-
     fun selectVersion(id: Long) {
         viewModelScope.launch {
             repository.selectVersion(id)
         }
     }
 
-    fun addCustomVersion(versionName: String, tag: String) {
-        val trimmed = versionName.trim()
-        if (trimmed.isNotEmpty()) {
-            viewModelScope.launch {
-                repository.addVersion(trimmed, tag.ifEmpty { "Custom" }, selectNow = true)
-                _isAddDialogOpen.value = false
-            }
-        }
-    }
-
-    fun importApkUri(uri: Uri) {
-        val context = getApplication<Application>().applicationContext
-        viewModelScope.launch(Dispatchers.IO) {
-            _isLoadingApk.value = true
-            try {
-                val tempFile = File(context.cacheDir, "temp_import_${System.currentTimeMillis()}.apk")
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    tempFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-
-                val pm = context.packageManager
-                val pkgInfo = pm.getPackageArchiveInfo(tempFile.absolutePath, 0)
-                if (pkgInfo != null) {
-                    val versionName = pkgInfo.versionName ?: "Unknown"
-                    val isMojang = pkgInfo.packageName == MINECRAFT_PACKAGE
-                    val tag = if (isMojang) "Bedrock APK" else "Custom APK"
-
-                    repository.addVersion(versionName, tag, selectNow = true)
-
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.msg_apk_imported, versionName),
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, context.getString(R.string.err_apk_invalid), Toast.LENGTH_SHORT).show()
-                    }
-                }
-                tempFile.delete()
-            } catch (_: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, context.getString(R.string.err_apk_read), Toast.LENGTH_SHORT).show()
-                }
-            } finally {
-                _isLoadingApk.value = false
-            }
-        }
-    }
-
-    fun deleteVersion(id: Long) {
-        viewModelScope.launch {
-            repository.deleteVersion(id)
-        }
-    }
-
     fun launchGame(context: Context) {
-        val isInstalled = _mcStatus.value.isInstalled
-        if (isInstalled) {
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(MINECRAFT_PACKAGE)
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                Toast.makeText(context, context.getString(R.string.toast_launching), Toast.LENGTH_SHORT).show()
-                context.startActivity(launchIntent)
-            } else {
-                openGooglePlay(context)
-            }
+        val currentSelected = selectedVersion.value
+        val targetPackage = currentSelected?.packageName ?: _mcStatus.value.primaryPackageName
+
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(targetPackage)
+        if (launchIntent != null) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            Toast.makeText(context, context.getString(R.string.toast_launching), Toast.LENGTH_SHORT).show()
+            context.startActivity(launchIntent)
         } else {
             Toast.makeText(context, context.getString(R.string.toast_not_installed), Toast.LENGTH_SHORT).show()
-            openGooglePlay(context)
+            openGooglePlay(context, targetPackage)
         }
     }
 
-    fun openGooglePlay(context: Context) {
+    fun openGooglePlay(context: Context, packageName: String = MINECRAFT_PACKAGE_BEDROCK) {
         try {
-            val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$MINECRAFT_PACKAGE")).apply {
+            val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(marketIntent)
         } catch (_: Exception) {
-            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$MINECRAFT_PACKAGE")).apply {
+            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName")).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(webIntent)
         }
     }
 
-    private fun checkMinecraftInstalled(context: Context): MinecraftStatus {
-        return try {
-            val pm = context.packageManager
-            val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                pm.getPackageInfo(MINECRAFT_PACKAGE, PackageManager.PackageInfoFlags.of(0))
-            } else {
-                @Suppress("DEPRECATION")
-                pm.getPackageInfo(MINECRAFT_PACKAGE, 0)
+    fun shareApp(context: Context) {
+        try {
+            val shareText = context.getString(R.string.share_text)
+            val sendIntent = Intent().apply {
+                action = Intent.ACTION_SEND
+                putExtra(Intent.EXTRA_TEXT, "$shareText\n\nhttps://github.com/AndreyDev86/Qwe")
+                type = "text/plain"
             }
-            val vCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                info.longVersionCode
-            } else {
-                @Suppress("DEPRECATION")
-                info.versionCode.toLong()
+            val chooserIntent = Intent.createChooser(sendIntent, context.getString(R.string.share_title)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            MinecraftStatus(
-                isInstalled = true,
-                versionName = info.versionName,
-                versionCode = vCode
-            )
-        } catch (_: PackageManager.NameNotFoundException) {
-            MinecraftStatus(isInstalled = false)
+            context.startActivity(chooserIntent)
         } catch (_: Exception) {
-            MinecraftStatus(isInstalled = false)
+            // Ignore error
         }
+    }
+
+    private fun scanAllInstalledMinecraftPackages(context: Context): List<DetectedAppInfo> {
+        val pm = context.packageManager
+        val candidatePackages = listOf(
+            MINECRAFT_PACKAGE_BEDROCK to "Bedrock",
+            MINECRAFT_PACKAGE_PREVIEW to "Preview",
+            MINECRAFT_PACKAGE_EDUCATION to "Education"
+        )
+
+        val detectedList = mutableListOf<DetectedAppInfo>()
+
+        for ((pkgName, tag) in candidatePackages) {
+            try {
+                val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    pm.getPackageInfo(pkgName, PackageManager.PackageInfoFlags.of(0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    pm.getPackageInfo(pkgName, 0)
+                }
+
+                val vName = info.versionName ?: "Unknown"
+                val vCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    info.longVersionCode
+                } else {
+                    @Suppress("DEPRECATION")
+                    info.versionCode.toLong()
+                }
+
+                detectedList.add(
+                    DetectedAppInfo(
+                        packageName = pkgName,
+                        versionName = vName,
+                        versionCode = vCode,
+                        tag = tag
+                    )
+                )
+            } catch (_: PackageManager.NameNotFoundException) {
+                // Package not installed
+            } catch (_: Exception) {
+                // Ignore error
+            }
+        }
+
+        return detectedList
     }
 }

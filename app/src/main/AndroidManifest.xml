@@ -7,6 +7,8 @@
 
     <queries>
         <package android:name="com.mojang.minecraftpe" />
+        <package android:name="com.mojang.minecraftpe.beta" />
+        <package android:name="com.mojang.minecraftedu" />
     </queries>
 
     <application

@@ -2,60 +2,62 @@ package com.example.data
 
 import kotlinx.coroutines.flow.Flow
 
+data class DetectedAppInfo(
+    val packageName: String,
+    val versionName: String,
+    val versionCode: Long,
+    val tag: String
+)
+
 class VersionRepository(private val versionDao: MinecraftVersionDao) {
     val allVersions: Flow<List<MinecraftVersion>> = versionDao.getAllVersions()
-
-    suspend fun addVersion(versionName: String, tag: String, selectNow: Boolean = true): Long {
-        val existing = versionDao.getVersionByName(versionName)
-        val id = if (existing != null) {
-            versionDao.updateVersion(existing.copy(tag = tag))
-            existing.id
-        } else {
-            versionDao.insertVersion(
-                MinecraftVersion(
-                    versionName = versionName,
-                    tag = tag,
-                    isSelected = false,
-                    isAutoDetected = false
-                )
-            )
-        }
-        if (selectNow) {
-            versionDao.selectVersion(id)
-        }
-        return id
-    }
 
     suspend fun selectVersion(id: Long) {
         versionDao.selectVersion(id)
     }
 
-    suspend fun deleteVersion(id: Long) {
-        versionDao.deleteVersionById(id)
-    }
+    suspend fun syncDetectedApps(detectedApps: List<DetectedAppInfo>) {
+        if (detectedApps.isEmpty()) {
+            versionDao.clearAllVersions()
+            return
+        }
 
-    suspend fun syncDetectedVersion(detectedVersion: String?) {
-        if (detectedVersion.isNullOrBlank()) return
+        val detectedPackages = detectedApps.map { it.packageName }
+        versionDao.removeVersionsNotIn(detectedPackages)
 
-        val existingAuto = versionDao.getAutoDetectedVersion()
         val currentlySelected = versionDao.getSelectedVersion()
+        var hasSelected = currentlySelected != null && detectedPackages.contains(currentlySelected.packageName)
 
-        if (existingAuto != null) {
-            if (existingAuto.versionName != detectedVersion) {
-                versionDao.updateVersion(existingAuto.copy(versionName = detectedVersion))
-            }
-        } else {
-            val shouldSelect = currentlySelected == null
-            val newId = versionDao.insertVersion(
-                MinecraftVersion(
-                    versionName = detectedVersion,
-                    tag = "Installed",
-                    isSelected = shouldSelect,
-                    isAutoDetected = true
+        for (app in detectedApps) {
+            val existing = versionDao.getVersionByPackage(app.packageName)
+            if (existing != null) {
+                if (existing.versionName != app.versionName || existing.versionCode != app.versionCode || existing.tag != app.tag) {
+                    versionDao.updateVersion(
+                        existing.copy(
+                            versionName = app.versionName,
+                            versionCode = app.versionCode,
+                            tag = app.tag,
+                            isInstalled = true
+                        )
+                    )
+                }
+            } else {
+                val shouldSelect = !hasSelected
+                val newId = versionDao.insertVersion(
+                    MinecraftVersion(
+                        packageName = app.packageName,
+                        versionName = app.versionName,
+                        versionCode = app.versionCode,
+                        tag = app.tag,
+                        isSelected = shouldSelect,
+                        isAutoDetected = true,
+                        isInstalled = true
+                    )
                 )
-            )
-            if (shouldSelect) {
-                versionDao.selectVersion(newId)
+                if (shouldSelect) {
+                    versionDao.selectVersion(newId)
+                    hasSelected = true
+                }
             }
         }
     }
