@@ -37,7 +37,7 @@
     <string name="subtitle_download_hub">Версии Minecraft PE с портала mcpehub.org</string>
     <string name="tab_catalog">Каталог</string>
     <string name="tab_mcpehub_site">Сайт MCPEHub.org</string>
-    <string name="btn_download">Скачать APK</string>
+    <string name="btn_download">Ссылка на версию</string>
     <string name="btn_download_from_mcpehub">Скачать с сайта</string>
     <string name="btn_downloading">Скачивание</string>
     <string name="btn_install">Установить</string>

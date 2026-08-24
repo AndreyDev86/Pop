@@ -96,15 +96,26 @@ class ApkDownloadManager(private val context: Context) {
                 totalBytes = version.sizeBytes
             )
 
-            // Resolve target download URL
-            var directDownloadUrl = version.downloadUrl
-            var refererUrl = version.articleUrl.ifBlank { "https://mcpehub.org/" }
+            // Prepare list of candidate URLs to try in order
+            val candidateUrls = mutableListOf<String>()
 
-            // If downloadUrl is an article webpage, attempt to resolve the real dlfile or apk link
-            if (directDownloadUrl.endsWith(".html") || directDownloadUrl.contains("mcpehub.org/download-mcpe/")) {
+            // 1. Direct download URL if not an HTML article
+            if (version.downloadUrl.isNotBlank() && !version.downloadUrl.endsWith(".html")) {
+                candidateUrls.add(version.downloadUrl)
+            }
+
+            // 2. High-speed direct mirror for this version
+            val directMirror = McpeHubRepository.getDirectApkMirror(version.versionName, version.tag)
+            if (!candidateUrls.contains(directMirror)) {
+                candidateUrls.add(directMirror)
+            }
+
+            // 3. If primary or article URL was provided, attempt to scrape real dlfile links
+            if (version.downloadUrl.endsWith(".html") || version.articleUrl.isNotBlank()) {
+                val pageToScrape = if (version.downloadUrl.endsWith(".html")) version.downloadUrl else version.articleUrl
                 try {
                     val pageRequest = Request.Builder()
-                        .url(directDownloadUrl)
+                        .url(pageToScrape)
                         .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
                         .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
                         .build()
@@ -112,95 +123,110 @@ class ApkDownloadManager(private val context: Context) {
                     val pageResponse = okHttpClient.newCall(pageRequest).execute()
                     if (pageResponse.isSuccessful) {
                         val pageHtml = pageResponse.body?.string().orEmpty()
-                        refererUrl = directDownloadUrl
-
-                        // Search for download links in page: /engine/dlfile.php?id=... or .apk
-                        val dlMatch = Regex("""href=["'](/engine/dlfile\.php\?id=\d+|https?://[^"']+\.apk)""").find(pageHtml)
-                        if (dlMatch != null) {
-                            val matchedUrl = dlMatch.groupValues[1]
-                            directDownloadUrl = if (matchedUrl.startsWith("http")) {
-                                matchedUrl
-                            } else {
-                                "https://mcpehub.org$matchedUrl"
+                        val dlMatches = Regex("""href=["'](/engine/dlfile\.php\?id=\d+|https?://[^"']+\.apk)""").findAll(pageHtml)
+                        for (match in dlMatches) {
+                            val rawUrl = match.groupValues[1]
+                            val fullUrl = if (rawUrl.startsWith("http")) rawUrl else "https://mcpehub.org$rawUrl"
+                            if (!candidateUrls.contains(fullUrl)) {
+                                candidateUrls.add(0, fullUrl) // Try extracted dlfile link first
                             }
                         }
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Could not resolve download link from page: ${e.message}")
+                    Log.w(TAG, "Could not scrape download link from page: ${e.message}")
                 }
             }
 
-            val request = Request.Builder()
-                .url(directDownloadUrl)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
-                .header("Referer", refererUrl)
-                .header("Accept", "*/*")
-                .build()
-
-            val response = okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                if (response.code == 404) {
-                    throw Exception("Ошибка 404: Файл перемещен на сервере. Нажмите «Открыть статью», чтобы загрузить через сайт MCPEHub.")
-                } else {
-                    throw Exception("HTTP ${response.code}: ${response.message}")
-                }
+            // Ensure fallback direct mirror is always in candidate list
+            if (!candidateUrls.contains(directMirror)) {
+                candidateUrls.add(directMirror)
             }
 
-            val body = response.body ?: throw Exception("Пустой ответ от сервера")
-            val contentType = response.header("Content-Type", "") ?: ""
+            var downloadSucceeded = false
+            var lastException: Exception? = null
 
-            // If the response is HTML rather than binary/apk (e.g. intermediate landing page), notify user
-            if (contentType.contains("text/html") && !directDownloadUrl.endsWith(".apk")) {
-                throw Exception("Для скачивания этой версии требуется открыть страницу статьи MCPEHub.")
-            }
+            for (candidateUrl in candidateUrls) {
+                if (job.isCancelled) break
+                try {
+                    Log.d(TAG, "Attempting download for ${version.title} from: $candidateUrl")
+                    val request = Request.Builder()
+                        .url(candidateUrl)
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                        .header("Referer", version.articleUrl.ifBlank { "https://mcpehub.org/" })
+                        .header("Accept", "*/*")
+                        .build()
 
-            val totalBytes = if (body.contentLength() > 0) body.contentLength() else version.sizeBytes
+                    val response = okHttpClient.newCall(request).execute()
+                    val contentType = response.header("Content-Type", "") ?: ""
 
-            if (tempFile.exists()) {
-                tempFile.delete()
-            }
+                    if (response.isSuccessful && !contentType.contains("text/html")) {
+                        val body = response.body ?: continue
+                        val totalBytes = if (body.contentLength() > 0) body.contentLength() else version.sizeBytes
 
-            var bytesReadTotal = 0L
-            body.byteStream().use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    val buffer = ByteArray(32 * 1024)
-                    var read: Int
-                    var lastUpdatePercent = -1
-
-                    while (input.read(buffer).also { read = it } != -1) {
-                        if (job.isCancelled) {
+                        if (tempFile.exists()) {
                             tempFile.delete()
-                            throw CancellationException("Download cancelled by user")
                         }
-                        output.write(buffer, 0, read)
-                        bytesReadTotal += read
 
-                        val progress = if (totalBytes > 0) {
-                            (bytesReadTotal.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+                        var bytesReadTotal = 0L
+                        body.byteStream().use { input ->
+                            FileOutputStream(tempFile).use { output ->
+                                val buffer = ByteArray(32 * 1024)
+                                var read: Int
+                                var lastUpdatePercent = -1
+
+                                while (input.read(buffer).also { read = it } != -1) {
+                                    if (job.isCancelled) {
+                                        tempFile.delete()
+                                        throw CancellationException("Download cancelled by user")
+                                    }
+                                    output.write(buffer, 0, read)
+                                    bytesReadTotal += read
+
+                                    val progress = if (totalBytes > 0) {
+                                        (bytesReadTotal.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+                                    } else {
+                                        0f
+                                    }
+
+                                    val currentPercent = (progress * 100).toInt()
+                                    if (currentPercent != lastUpdatePercent) {
+                                        lastUpdatePercent = currentPercent
+                                        stateFlow.value = DownloadState.Downloading(
+                                            progress = progress,
+                                            downloadedBytes = bytesReadTotal,
+                                            totalBytes = totalBytes
+                                        )
+                                    }
+                                }
+                                output.flush()
+                            }
+                        }
+
+                        // Validate downloaded file
+                        if (tempFile.length() > 5_000_000L) {
+                            if (tempFile.renameTo(targetFile)) {
+                                stateFlow.value = DownloadState.Downloaded(targetFile)
+                            } else {
+                                tempFile.copyTo(targetFile, overwrite = true)
+                                tempFile.delete()
+                                stateFlow.value = DownloadState.Downloaded(targetFile)
+                            }
+                            downloadSucceeded = true
+                            break
                         } else {
-                            0f
-                        }
-
-                        val currentPercent = (progress * 100).toInt()
-                        if (currentPercent != lastUpdatePercent) {
-                            lastUpdatePercent = currentPercent
-                            stateFlow.value = DownloadState.Downloading(
-                                progress = progress,
-                                downloadedBytes = bytesReadTotal,
-                                totalBytes = totalBytes
-                            )
+                            tempFile.delete()
                         }
                     }
-                    output.flush()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Candidate $candidateUrl failed: ${e.message}")
+                    lastException = e
                 }
             }
 
-            if (tempFile.renameTo(targetFile)) {
-                stateFlow.value = DownloadState.Downloaded(targetFile)
-            } else {
-                tempFile.copyTo(targetFile, overwrite = true)
-                tempFile.delete()
-                stateFlow.value = DownloadState.Downloaded(targetFile)
+            if (!downloadSucceeded && !job.isCancelled) {
+                throw lastException ?: Exception("Не удалось загрузить файл APK")
             }
 
         } catch (e: CancellationException) {
