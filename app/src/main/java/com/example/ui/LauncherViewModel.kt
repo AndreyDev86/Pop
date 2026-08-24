@@ -334,6 +334,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private fun scanAllInstalledMinecraftPackages(context: Context): List<DetectedAppInfo> {
         val pm = context.packageManager
+        val myPackageName = context.packageName
         val detectedMap = mutableMapOf<String, DetectedAppInfo>()
 
         data class PresetCandidate(val pkg: String, val name: String, val tag: String)
@@ -341,7 +342,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             PresetCandidate(MINECRAFT_PACKAGE_BEDROCK, "Minecraft", "Оригинал"),
             PresetCandidate(MINECRAFT_PACKAGE_PREVIEW, "Minecraft Preview", "Preview"),
             PresetCandidate(MINECRAFT_PACKAGE_EDUCATION, "Minecraft Education", "Education"),
-            PresetCandidate("com.mojang.minecraft", "Minecraft", "Оригинал")
+            PresetCandidate("com.mojang.minecraft", "Minecraft", "Оригинал"),
+            PresetCandidate("net.kdt.pojavlaunch", "PojavLauncher", "Pojav"),
+            PresetCandidate("net.kdt.pojavlaunch.debug", "PojavLauncher Debug", "Pojav")
         )
 
         for (candidate in knownCandidates) {
@@ -374,11 +377,68 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                     versionCode = vCode,
                     tag = candidate.tag
                 )
-            } catch (_: PackageManager.NameNotFoundException) {
-                // Not installed
             } catch (_: Exception) {
-                // Ignore error
+                // Not installed
             }
+        }
+
+        // Scan all installed packages for Minecraft clones and custom versions
+        try {
+            val installedPackages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getInstalledPackages(PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstalledPackages(0)
+            }
+
+            for (pkgInfo in installedPackages) {
+                val pkgName = pkgInfo.packageName ?: continue
+                if (pkgName == myPackageName || detectedMap.containsKey(pkgName)) continue
+
+                val appLabel = try {
+                    pkgInfo.applicationInfo?.let { pm.getApplicationLabel(it).toString() } ?: ""
+                } catch (_: Exception) {
+                    ""
+                }
+
+                val lowerPkg = pkgName.lowercase()
+                val lowerLabel = appLabel.lowercase()
+
+                val isMinecraftClone = lowerPkg.contains("minecraft") ||
+                        lowerPkg.contains("mojang") ||
+                        lowerPkg.contains("mcpe") ||
+                        lowerLabel.contains("minecraft") ||
+                        lowerLabel.contains("майнкрафт") ||
+                        lowerLabel.contains("mcpe")
+
+                if (isMinecraftClone) {
+                    val vName = pkgInfo.versionName ?: "1.0"
+                    val vCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        pkgInfo.longVersionCode
+                    } else {
+                        @Suppress("DEPRECATION")
+                        pkgInfo.versionCode.toLong()
+                    }
+
+                    val tag = when {
+                        pkgName == MINECRAFT_PACKAGE_BEDROCK || pkgName == "com.mojang.minecraft" -> "Оригинал"
+                        lowerPkg.contains("beta") || lowerPkg.contains("preview") || lowerLabel.contains("preview") || lowerLabel.contains("beta") -> "Preview"
+                        lowerPkg.contains("edu") || lowerLabel.contains("education") -> "Education"
+                        lowerPkg.contains("pojav") || lowerLabel.contains("pojav") -> "Pojav"
+                        else -> "Клон"
+                    }
+
+                    detectedMap[pkgName] = DetectedAppInfo(
+                        appName = if (appLabel.isNotBlank()) appLabel else "Minecraft",
+                        packageName = pkgName,
+                        versionName = vName,
+                        versionCode = vCode,
+                        tag = tag
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            // Ignore scan errors
         }
 
         // Return sorted list: Original first, then sorted by version descending
