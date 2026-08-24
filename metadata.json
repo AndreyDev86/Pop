@@ -1,0 +1,6 @@
+{
+  "name": "Minecraft Launcher",
+  "description": "Sleek modern launcher for Minecraft Bedrock Edition with installation detection and instant launch.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
