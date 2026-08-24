@@ -4,9 +4,10 @@
 
 ## 📥 Скачать APK
 
-Нажмите на ссылку ниже, чтобы скачать последнюю версию приложения:
+- **Скачать напрямую из репозитория:** [apk/MinecraftLauncher.apk](https://github.com/AndreyDev86/Qwe/raw/main/apk/MinecraftLauncher.apk)
+- **Скачать из раздела Releases:** [app-debug.apk](https://github.com/AndreyDev86/Qwe/releases/download/latest/app-debug.apk)
 
-[![Скачать APK](https://img.shields.io/badge/Скачать_APK-latest-38BDF8?style=for-the-badge&logo=android&logoColor=white)](https://github.com/AndreyDev86/Qwe/releases/download/latest/app-debug.apk)
+[![Скачать APK](https://img.shields.io/badge/Скачать_APK-MinecraftLauncher.apk-38BDF8?style=for-the-badge&logo=android&logoColor=white)](https://github.com/AndreyDev86/Qwe/raw/main/apk/MinecraftLauncher.apk)
 
 Или перейдите в раздел [Releases (Релизы)](https://github.com/AndreyDev86/Qwe/releases).
 
