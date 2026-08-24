@@ -96,17 +96,64 @@ class ApkDownloadManager(private val context: Context) {
                 totalBytes = version.sizeBytes
             )
 
+            // Resolve target download URL
+            var directDownloadUrl = version.downloadUrl
+            var refererUrl = version.articleUrl.ifBlank { "https://mcpehub.org/" }
+
+            // If downloadUrl is an article webpage, attempt to resolve the real dlfile or apk link
+            if (directDownloadUrl.endsWith(".html") || directDownloadUrl.contains("mcpehub.org/download-mcpe/")) {
+                try {
+                    val pageRequest = Request.Builder()
+                        .url(directDownloadUrl)
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                        .build()
+
+                    val pageResponse = okHttpClient.newCall(pageRequest).execute()
+                    if (pageResponse.isSuccessful) {
+                        val pageHtml = pageResponse.body?.string().orEmpty()
+                        refererUrl = directDownloadUrl
+
+                        // Search for download links in page: /engine/dlfile.php?id=... or .apk
+                        val dlMatch = Regex("""href=["'](/engine/dlfile\.php\?id=\d+|https?://[^"']+\.apk)""").find(pageHtml)
+                        if (dlMatch != null) {
+                            val matchedUrl = dlMatch.groupValues[1]
+                            directDownloadUrl = if (matchedUrl.startsWith("http")) {
+                                matchedUrl
+                            } else {
+                                "https://mcpehub.org$matchedUrl"
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not resolve download link from page: ${e.message}")
+                }
+            }
+
             val request = Request.Builder()
-                .url(version.downloadUrl)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android) MinecraftLauncher")
+                .url(directDownloadUrl)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                .header("Referer", refererUrl)
+                .header("Accept", "*/*")
                 .build()
 
             val response = okHttpClient.newCall(request).execute()
             if (!response.isSuccessful) {
-                throw Exception("HTTP ${response.code}: ${response.message}")
+                if (response.code == 404) {
+                    throw Exception("Ошибка 404: Файл перемещен на сервере. Нажмите «Открыть статью», чтобы загрузить через сайт MCPEHub.")
+                } else {
+                    throw Exception("HTTP ${response.code}: ${response.message}")
+                }
             }
 
-            val body = response.body ?: throw Exception("Empty response body")
+            val body = response.body ?: throw Exception("Пустой ответ от сервера")
+            val contentType = response.header("Content-Type", "") ?: ""
+
+            // If the response is HTML rather than binary/apk (e.g. intermediate landing page), notify user
+            if (contentType.contains("text/html") && !directDownloadUrl.endsWith(".apk")) {
+                throw Exception("Для скачивания этой версии требуется открыть страницу статьи MCPEHub.")
+            }
+
             val totalBytes = if (body.contentLength() > 0) body.contentLength() else version.sizeBytes
 
             if (tempFile.exists()) {
@@ -166,6 +213,95 @@ class ApkDownloadManager(private val context: Context) {
             stateFlow.value = DownloadState.Error(e.message ?: "Ошибка скачивания")
         } finally {
             downloadJobs.remove(version.id)
+        }
+    }
+
+    suspend fun downloadDirectUrl(
+        id: String,
+        url: String,
+        fileName: String,
+        referer: String,
+        job: Job
+    ) = withContext(Dispatchers.IO) {
+        val stateFlow = _downloadStates.computeIfAbsent(id) {
+            MutableStateFlow(DownloadState.Idle)
+        }
+        downloadJobs[id] = job
+
+        val targetFile = getDownloadFile(fileName)
+        val tempFile = File(getDownloadsDir(), "${targetFile.name}.downloading")
+
+        try {
+            stateFlow.value = DownloadState.Downloading(
+                progress = 0f,
+                downloadedBytes = 0L,
+                totalBytes = 0L
+            )
+
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                .header("Referer", referer.ifBlank { "https://mcpehub.org/" })
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                throw Exception("HTTP ${response.code}: ${response.message}")
+            }
+
+            val body = response.body ?: throw Exception("Empty response body")
+            val totalBytes = body.contentLength()
+
+            if (tempFile.exists()) tempFile.delete()
+
+            var bytesReadTotal = 0L
+            body.byteStream().use { input ->
+                FileOutputStream(tempFile).use { output ->
+                    val buffer = ByteArray(32 * 1024)
+                    var read: Int
+                    var lastUpdatePercent = -1
+
+                    while (input.read(buffer).also { read = it } != -1) {
+                        if (job.isCancelled) {
+                            tempFile.delete()
+                            throw CancellationException("Download cancelled by user")
+                        }
+                        output.write(buffer, 0, read)
+                        bytesReadTotal += read
+
+                        val progress = if (totalBytes > 0) {
+                            (bytesReadTotal.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+                        } else 0f
+
+                        val currentPercent = (progress * 100).toInt()
+                        if (currentPercent != lastUpdatePercent) {
+                            lastUpdatePercent = currentPercent
+                            stateFlow.value = DownloadState.Downloading(
+                                progress = progress,
+                                downloadedBytes = bytesReadTotal,
+                                totalBytes = totalBytes
+                            )
+                        }
+                    }
+                    output.flush()
+                }
+            }
+
+            if (tempFile.renameTo(targetFile)) {
+                stateFlow.value = DownloadState.Downloaded(targetFile)
+            } else {
+                tempFile.copyTo(targetFile, overwrite = true)
+                tempFile.delete()
+                stateFlow.value = DownloadState.Downloaded(targetFile)
+            }
+        } catch (e: CancellationException) {
+            tempFile.delete()
+            stateFlow.value = DownloadState.Idle
+        } catch (e: Exception) {
+            tempFile.delete()
+            stateFlow.value = DownloadState.Error(e.message ?: "Ошибка скачивания")
+        } finally {
+            downloadJobs.remove(id)
         }
     }
 

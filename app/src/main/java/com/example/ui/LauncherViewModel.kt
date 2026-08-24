@@ -79,12 +79,19 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _downloadSearchQuery = MutableStateFlow("")
     val downloadSearchQuery: StateFlow<String> = _downloadSearchQuery.asStateFlow()
 
+    private val _activeHubTab = MutableStateFlow(0)
+    val activeHubTab: StateFlow<Int> = _activeHubTab.asStateFlow()
+
+    private val _activeWebUrl = MutableStateFlow("https://mcpehub.org/download-mcpe/")
+    val activeWebUrl: StateFlow<String> = _activeWebUrl.asStateFlow()
+
     init {
         val db = AppDatabase.getDatabase(application)
         repository = VersionRepository(db.versionDao())
         mcpeHubRepository = McpeHubRepository(application)
         downloadManager = ApkDownloadManager(application)
         _siteUrl.value = mcpeHubRepository.getSiteUrl()
+        _activeWebUrl.value = mcpeHubRepository.getSiteUrl()
 
         versions = repository.allVersions.stateIn(
             scope = viewModelScope,
@@ -171,14 +178,28 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun openMcpeHubArticle(context: Context, articleUrl: String) {
+    fun setActiveHubTab(index: Int) {
+        _activeHubTab.value = index
+    }
+
+    fun openInWebView(url: String) {
+        val target = url.ifBlank { mcpeHubRepository.getSiteUrl() }
+        _activeWebUrl.value = target
+        _activeHubTab.value = 1
+    }
+
+    fun openMcpeHubArticle(context: Context, articleUrl: String, openExternal: Boolean = false) {
         val target = if (articleUrl.isNotBlank()) articleUrl else "https://mcpehub.org/download-mcpe/"
-        try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(target))
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            Toast.makeText(context, "Не удалось открыть браузер: ${e.message}", Toast.LENGTH_SHORT).show()
+        if (openExternal) {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(target))
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Не удалось открыть браузер: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            openInWebView(target)
         }
     }
 
@@ -187,8 +208,14 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun startDownload(version: DownloadableVersion) {
-        val job = viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO) {
             downloadManager.downloadApk(version, coroutineContext[kotlinx.coroutines.Job]!!)
+        }
+    }
+
+    fun startDirectDownload(id: String, url: String, fileName: String, referer: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            downloadManager.downloadDirectUrl(id, url, fileName, referer, coroutineContext[kotlinx.coroutines.Job]!!)
         }
     }
 
