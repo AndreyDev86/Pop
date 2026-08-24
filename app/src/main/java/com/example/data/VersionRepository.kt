@@ -13,6 +13,10 @@ data class DetectedAppInfo(
 class VersionRepository(private val versionDao: MinecraftVersionDao) {
     val allVersions: Flow<List<MinecraftVersion>> = versionDao.getAllVersions()
 
+    suspend fun getAllVersionsDirect(): List<MinecraftVersion> {
+        return versionDao.getAllVersionsDirect()
+    }
+
     suspend fun selectVersion(id: Long) {
         versionDao.selectVersion(id)
     }

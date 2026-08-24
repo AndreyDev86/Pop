@@ -30,4 +30,29 @@
     <string name="share_title">Поделиться лаунчером</string>
     <string name="share_text">Попробуй быстрый и удобный Minecraft Launcher для Bedrock Edition!</string>
     <string name="share_link">https://github.com/AndreyDev86/Pop</string>
+
+    <!-- Download Hub Strings -->
+    <string name="btn_download_hub">СКАЧАТЬ ВЕРСИИ</string>
+    <string name="title_download_hub">Каталог версий</string>
+    <string name="subtitle_download_hub">Загрузка и установка Minecraft из GitHub репозитория</string>
+    <string name="btn_download">Скачать</string>
+    <string name="btn_downloading">Скачивание</string>
+    <string name="btn_install">Установить</string>
+    <string name="btn_reinstall">Установить заново</string>
+    <string name="btn_cancel">Отмена</string>
+    <string name="label_repo_source">Репозиторий GitHub</string>
+    <string name="filter_all">Все</string>
+    <string name="filter_releases">Релизы</string>
+    <string name="filter_betas">Бета / Preview</string>
+    <string name="filter_clones">Клоны</string>
+    <string name="status_ready_to_install">Готово к установке</string>
+    <string name="status_download_failed">Ошибка загрузки</string>
+    <string name="status_installed_on_device">Установлено</string>
+    <string name="search_versions_hint">Поиск версии или тега…</string>
+    <string name="empty_downloads_title">Нет доступных версий</string>
+    <string name="empty_downloads_desc">В репозитории GitHub не найдено файлов APK или отсутствует подключение к сети.</string>
+    <string name="btn_change_repo">Сменить репозиторий</string>
+    <string name="dialog_repo_title">Репозиторий GitHub</string>
+    <string name="dialog_repo_desc">Укажите репозиторий в формате owner/repository (например: AndreyDev86/Pop)</string>
+    <string name="btn_save">Сохранить</string>
 </resources>

@@ -13,6 +13,9 @@ interface MinecraftVersionDao {
     @Query("SELECT * FROM minecraft_versions ORDER BY createdAt DESC")
     fun getAllVersions(): Flow<List<MinecraftVersion>>
 
+    @Query("SELECT * FROM minecraft_versions ORDER BY createdAt DESC")
+    suspend fun getAllVersionsDirect(): List<MinecraftVersion>
+
     @Query("SELECT * FROM minecraft_versions WHERE isSelected = 1 LIMIT 1")
     suspend fun getSelectedVersion(): MinecraftVersion?
 

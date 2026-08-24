@@ -11,8 +11,12 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.R
+import com.example.data.ApkDownloadManager
 import com.example.data.AppDatabase
 import com.example.data.DetectedAppInfo
+import com.example.data.DownloadState
+import com.example.data.DownloadableVersion
+import com.example.data.GitHubReleasesRepository
 import com.example.data.MinecraftVersion
 import com.example.data.VersionRepository
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +46,8 @@ data class MinecraftStatus(
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: VersionRepository
+    private val gitHubRepository: GitHubReleasesRepository
+    private val downloadManager: ApkDownloadManager
 
     val versions: StateFlow<List<MinecraftVersion>>
     val selectedVersion: StateFlow<MinecraftVersion?>
@@ -52,12 +58,33 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _isVersionSheetOpen = MutableStateFlow(false)
     val isVersionSheetOpen: StateFlow<Boolean> = _isVersionSheetOpen.asStateFlow()
 
+    private val _isDownloadHubOpen = MutableStateFlow(false)
+    val isDownloadHubOpen: StateFlow<Boolean> = _isDownloadHubOpen.asStateFlow()
+
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
+
+    private val _downloadableVersions = MutableStateFlow<List<DownloadableVersion>>(emptyList())
+    val downloadableVersions: StateFlow<List<DownloadableVersion>> = _downloadableVersions.asStateFlow()
+
+    private val _isLoadingReleases = MutableStateFlow(false)
+    val isLoadingReleases: StateFlow<Boolean> = _isLoadingReleases.asStateFlow()
+
+    private val _gitHubRepo = MutableStateFlow("")
+    val gitHubRepo: StateFlow<String> = _gitHubRepo.asStateFlow()
+
+    private val _downloadFilter = MutableStateFlow("Все")
+    val downloadFilter: StateFlow<String> = _downloadFilter.asStateFlow()
+
+    private val _downloadSearchQuery = MutableStateFlow("")
+    val downloadSearchQuery: StateFlow<String> = _downloadSearchQuery.asStateFlow()
 
     init {
         val db = AppDatabase.getDatabase(application)
         repository = VersionRepository(db.versionDao())
+        gitHubRepository = GitHubReleasesRepository(application)
+        downloadManager = ApkDownloadManager(application)
+        _gitHubRepo.value = gitHubRepository.getTargetRepo()
 
         versions = repository.allVersions.stateIn(
             scope = viewModelScope,
@@ -74,6 +101,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         )
 
         refreshStatus()
+        refreshDownloadableVersions()
     }
 
     fun refreshStatus() {
@@ -105,6 +133,64 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun closeVersionSheet() {
         _isVersionSheetOpen.value = false
+    }
+
+    fun openDownloadHub() {
+        _isDownloadHubOpen.value = true
+        refreshDownloadableVersions()
+    }
+
+    fun closeDownloadHub() {
+        _isDownloadHubOpen.value = false
+    }
+
+    fun setDownloadFilter(filter: String) {
+        _downloadFilter.value = filter
+    }
+
+    fun setDownloadSearchQuery(query: String) {
+        _downloadSearchQuery.value = query
+    }
+
+    fun setCustomGitHubRepo(repo: String) {
+        gitHubRepository.setTargetRepo(repo)
+        _gitHubRepo.value = gitHubRepository.getTargetRepo()
+    }
+
+    fun refreshDownloadableVersions() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingReleases.value = true
+            val currentVersions = repository.getAllVersionsDirect()
+            val installedPackages = currentVersions.map { it.packageName }.toSet()
+            val installedVersionNames = currentVersions.mapNotNull { it.versionName }.toSet()
+
+            val fetched = gitHubRepository.fetchReleases(installedPackages, installedVersionNames)
+            _downloadableVersions.value = fetched
+            _isLoadingReleases.value = false
+        }
+    }
+
+    fun getDownloadStateFlow(version: DownloadableVersion): StateFlow<DownloadState> {
+        return downloadManager.getStateFlow(version.id, version.fileName, version.sizeBytes)
+    }
+
+    fun startDownload(version: DownloadableVersion) {
+        val job = viewModelScope.launch(Dispatchers.IO) {
+            downloadManager.downloadApk(version, coroutineContext[kotlinx.coroutines.Job]!!)
+        }
+    }
+
+    fun cancelDownload(versionId: String) {
+        downloadManager.cancelDownload(versionId)
+    }
+
+    fun installDownloadedApk(context: Context, version: DownloadableVersion) {
+        val file = downloadManager.getDownloadFile(version.fileName)
+        if (file.exists()) {
+            downloadManager.installApk(context, file)
+        } else {
+            Toast.makeText(context, "Файл не найден. Скачайте заново.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     fun selectVersion(id: Long) {

@@ -38,7 +38,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Layers
@@ -80,6 +82,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.MinecraftVersion
+import com.example.ui.DownloadHubScreen
 import com.example.ui.LauncherViewModel
 import com.example.ui.theme.BlackBackground
 import com.example.ui.theme.BlueDark
@@ -121,6 +124,7 @@ fun LauncherScreen(
     val versions by viewModel.versions.collectAsState()
     val selectedVersion by viewModel.selectedVersion.collectAsState()
     val isVersionSheetOpen by viewModel.isVersionSheetOpen.collectAsState()
+    val isDownloadHubOpen by viewModel.isDownloadHubOpen.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
 
     val refreshRotation = remember { Animatable(0f) }
@@ -136,6 +140,14 @@ fun LauncherScreen(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
+    }
+
+    if (isDownloadHubOpen) {
+        DownloadHubScreen(
+            viewModel = viewModel,
+            onBack = { viewModel.closeDownloadHub() }
+        )
+        return
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -186,6 +198,26 @@ fun LauncherScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Download Versions Hub Button
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x14FFFFFF))
+                            .border(1.dp, Color(0x26FFFFFF), CircleShape)
+                            .clickable { viewModel.openDownloadHub() }
+                            .testTag("top_download_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = stringResource(R.string.title_download_hub),
+                            tint = CyanAccent,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+
+                    // Share APK Button
                     Box(
                         modifier = Modifier
                             .size(32.dp)
@@ -432,7 +464,57 @@ fun LauncherScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Download Versions Hub Button Card
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 320.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Brush.horizontalGradient(listOf(Color(0x1F0284C7), Color(0x1F38BDF8))))
+                        .border(1.dp, Color(0x4D38BDF8), RoundedCornerShape(18.dp))
+                        .clickable { viewModel.openDownloadHub() }
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .testTag("open_download_hub_card"),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            tint = CyanAccent,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = stringResource(R.string.btn_download_hub),
+                                color = CyanAccent,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.2.sp
+                            )
+                            Text(
+                                text = "Загрузка версий из GitHub репозитория",
+                                color = TextSecondary,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = CyanAccent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // System Status Card
                 Box(
@@ -642,6 +724,10 @@ fun LauncherScreen(
                 onInstallFromGooglePlay = {
                     viewModel.openGooglePlay(context)
                 },
+                onOpenDownloadHub = {
+                    viewModel.closeVersionSheet()
+                    viewModel.openDownloadHub()
+                },
                 onClose = {
                     viewModel.closeVersionSheet()
                 }
@@ -658,6 +744,7 @@ fun VersionManagerContent(
     onSelectVersion: (Long) -> Unit,
     onRescan: () -> Unit,
     onInstallFromGooglePlay: () -> Unit,
+    onOpenDownloadHub: () -> Unit,
     onClose: () -> Unit
 ) {
     Column(
@@ -665,7 +752,7 @@ fun VersionManagerContent(
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .padding(bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // Header
         Row(
@@ -700,40 +787,74 @@ fun VersionManagerContent(
             }
         }
 
-        // Rescan / Auto-detect trigger
+        // Action Buttons Row: Rescan & Download from GitHub
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(0x14FFFFFF))
-                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(14.dp))
-                .clickable(enabled = !isScanning) { onRescan() }
-                .padding(horizontal = 14.dp, vertical = 12.dp)
-                .testTag("rescan_versions_button"),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            if (isScanning) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = CyanAccent
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = null,
-                    tint = CyanAccent,
-                    modifier = Modifier.size(17.dp)
+            // Rescan / Auto-detect trigger
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0x14FFFFFF))
+                    .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(14.dp))
+                    .clickable(enabled = !isScanning) { onRescan() }
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+                    .testTag("rescan_versions_button"),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isScanning) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(15.dp),
+                        strokeWidth = 2.dp,
+                        color = CyanAccent
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        tint = CyanAccent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isScanning) stringResource(R.string.status_scanning) else stringResource(R.string.btn_rescan),
+                    color = TextPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = if (isScanning) stringResource(R.string.status_scanning) else stringResource(R.string.btn_rescan),
-                color = TextPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+
+            // Download Hub Button
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0x1A38BDF8))
+                    .border(1.dp, Color(0x4D38BDF8), RoundedCornerShape(14.dp))
+                    .clickable { onOpenDownloadHub() }
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+                    .testTag("sheet_open_download_hub_btn"),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CloudDownload,
+                    contentDescription = null,
+                    tint = CyanAccent,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.btn_download_hub),
+                    color = CyanAccent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         // Version List or Empty State
@@ -772,26 +893,49 @@ fun VersionManagerContent(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Brush.linearGradient(listOf(BlueDark, BluePrimary)))
-                            .clickable { onInstallFromGooglePlay() }
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.btn_install_gp),
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Brush.linearGradient(listOf(BlueDark, BluePrimary)))
+                                .clickable { onOpenDownloadHub() }
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.btn_download_hub),
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0x14FFFFFF))
+                                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(12.dp))
+                                .clickable { onInstallFromGooglePlay() }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Google Play",
+                                color = TextSecondary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
@@ -799,7 +943,7 @@ fun VersionManagerContent(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(280.dp),
+                    .height(260.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(versions, key = { it.id }) { ver ->
