@@ -198,24 +198,7 @@ fun LauncherScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Download Versions Hub Button
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(Color(0x14FFFFFF))
-                            .border(1.dp, Color(0x26FFFFFF), CircleShape)
-                            .clickable { viewModel.openDownloadHub() }
-                            .testTag("top_download_button"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudDownload,
-                            contentDescription = stringResource(R.string.title_download_hub),
-                            tint = CyanAccent,
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
+
 
                     // Share APK Button
                     Box(
@@ -466,55 +449,7 @@ fun LauncherScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Download Versions Hub Button Card
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 320.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Brush.horizontalGradient(listOf(Color(0x1F0284C7), Color(0x1F38BDF8))))
-                        .border(1.dp, Color(0x4D38BDF8), RoundedCornerShape(18.dp))
-                        .clickable { viewModel.openDownloadHub() }
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                        .testTag("open_download_hub_card"),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudDownload,
-                            contentDescription = null,
-                            tint = CyanAccent,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                text = stringResource(R.string.btn_download_hub),
-                                color = CyanAccent,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.2.sp
-                            )
-                            Text(
-                                text = "Загрузка версий с сайта mcpehub.org",
-                                color = TextSecondary,
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
 
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = null,
-                        tint = CyanAccent,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
 
                 // System Status Card
                 Box(
@@ -828,33 +763,7 @@ fun VersionManagerContent(
                 )
             }
 
-            // Download Hub Button
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0x1A38BDF8))
-                    .border(1.dp, Color(0x4D38BDF8), RoundedCornerShape(14.dp))
-                    .clickable { onOpenDownloadHub() }
-                    .padding(horizontal = 12.dp, vertical = 12.dp)
-                    .testTag("sheet_open_download_hub_btn"),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.CloudDownload,
-                    contentDescription = null,
-                    tint = CyanAccent,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.btn_download_hub),
-                    color = CyanAccent,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+
         }
 
         // Version List or Empty State
@@ -896,28 +805,7 @@ fun VersionManagerContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Brush.linearGradient(listOf(BlueDark, BluePrimary)))
-                                .clickable { onOpenDownloadHub() }
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CloudDownload,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = stringResource(R.string.btn_download_hub),
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+
 
                         Row(
                             modifier = Modifier
