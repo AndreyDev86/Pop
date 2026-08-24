@@ -29,4 +29,5 @@
     <string name="btn_share">Поделиться</string>
     <string name="share_title">Поделиться лаунчером</string>
     <string name="share_text">Попробуй быстрый и удобный Minecraft Launcher для Bedrock Edition!</string>
+    <string name="share_link">https://github.com/AndreyDev86/Pop</string>
 </resources>

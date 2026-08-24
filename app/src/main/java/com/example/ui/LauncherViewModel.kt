@@ -143,9 +143,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     fun shareApp(context: Context) {
         try {
             val shareText = context.getString(R.string.share_text)
+            val shareLink = context.getString(R.string.share_link)
             val sendIntent = Intent().apply {
                 action = Intent.ACTION_SEND
-                putExtra(Intent.EXTRA_TEXT, "$shareText\n\nhttps://github.com/AndreyDev86/Qwe")
+                putExtra(Intent.EXTRA_TEXT, "$shareText\n\n$shareLink")
                 type = "text/plain"
             }
             val chooserIntent = Intent.createChooser(sendIntent, context.getString(R.string.share_title)).apply {
